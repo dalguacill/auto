@@ -1,0 +1,44 @@
+name: Reservar Clases CrossFit
+
+on:
+  schedule:
+    # Ejecutar a las 19:30 UTC (20:30 CET en invierno, 21:30 CEST en verano)
+    # Para reservar martes (lunes 19:30), jueves (miércoles 19:30), viernes (jueves 19:30)
+    - cron: '30 18 0,2,3 * *'  # 18:30 UTC = 19:30 CET (lunes, miércoles, jueves)
+  
+  workflow_dispatch:  # Permite ejecutar manualmente
+
+env:
+  CLUB_USERNAME: ${{ secrets.CLUB_USERNAME }}
+  CLUB_PASSWORD: ${{ secrets.CLUB_PASSWORD }}
+
+jobs:
+  book-class:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Instalar dependencias
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        playwright install chromium
+        playwright install-deps
+    
+    - name: Ejecutar reserva
+      run: python book_class.py
+      
+    - name: Upload screenshot en caso de error
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: error-screenshot
+        path: error_screenshot.png
+        retention-days: 7
