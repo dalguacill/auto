@@ -102,74 +102,69 @@ def book_class():
             # 4. Buscar clase
             log(f"🔍 Buscando clase de CrossFit para {target_day_name} 19:30...")
             class_found = False
+            
+            # Estrategia 1: Buscar links con 19:30 y CROSS TRAIN
             try:
-                links = page.locator('a').all()
+                links = page.locator('a:has-text("19:30"):has-text("CROSS TRAIN")').all()
                 for link in links:
                     try:
                         text = link.inner_text(timeout=1000)
-                        if '19:30' in text and 'CROSS TRAIN' in text.upper():
-                            if link.is_visible():
-                                link.click(timeout=5000)
-                                class_found = True
-                                break
+                        # Verificar que no sea "Places exhaurides" (lleno)
+                        if 'exhaurides' not in text.lower() and link.is_visible():
+                            log(f"✅ Clase encontrada: {text}")
+                            link.click(timeout=5000)
+                            class_found = True
+                            break
                     except Exception:
                         continue
             except Exception as e:
                 log(f"Estrategia 1 falló: {e}")
 
             if not class_found:
-                try:
-                    elements = page.get_by_text('19:30').all()
-                    for elem in elements:
-                        parent = elem.locator('xpath=ancestor::a').first
-                        if parent.count() > 0:
-                            text = parent.inner_text()
-                            if 'CROSS TRAIN' in text.upper():
-                                parent.click(timeout=5000)
-                                class_found = True
-                                break
-                except Exception as e:
-                    log(f"Estrategia 2 falló: {e}")
-
-            if not class_found:
                 log("⚠️ No se encontró la clase")
                 save_screenshot(page, "error_class_not_found")
                 return False
 
-            # 5. Buscar botón de Reserva
-            log("🔍 Buscando botón de Reserva...")
-            reserve_selectors = [
-                'button:has-text("Reserva")',
-                'input[value="Reserva"]',
-                'button:text("Reserva")',
-                'a:has-text("Reserva")'
-            ]
-            reserve_button = None
-            for selector in reserve_selectors:
-                try:
-                    btn = page.locator(selector)
-                    if btn.count() > 0:
-                        reserve_button = btn
-                        break
-                except Exception:
-                    continue
-
-            if reserve_button is None or reserve_button.count() == 0:
-                log("⚠️ No hay botón de Reserva disponible")
-                save_screenshot(page, "error_no_button")
+            # 5. CRÍTICO: Esperar a que aparezca el modal/dialog
+            log("⏳ Esperando a que aparezca el modal...")
+            try:
+                # Esperar a que aparezca el dialog (modal)
+                page.wait_for_selector('dialog[aria-current="true"]', timeout=10000)
+                page.wait_for_timeout(2000)  # Espera adicional para que cargue completamente
+                save_screenshot(page, "step5_modal_appeared")
+                log("✅ Modal apareció correctamente")
+            except PlaywrightTimeout:
+                log("❌ Timeout esperando el modal")
+                save_screenshot(page, "error_modal_timeout")
                 return False
 
-            # 6. Reservar
-            log("🎉 Botón de Reserva encontrado, reservando...")
-            reserve_button.first.scroll_into_view_if_needed()
-            reserve_button.first.wait_for(state="visible", timeout=30000)
-            save_screenshot(page, "step6_before_reserve")
-            reserve_button.first.click(timeout=30000)
-            page.wait_for_timeout(3000)
-            save_screenshot(page, "step7_after_reserve")
+            # 6. Buscar botón de Reserva dentro del modal
+            log("🔍 Buscando botón de Reserva en el modal...")
+            
+            # El botón "Reserva" es un <a> (link) dentro del dialog
+            try:
+                reserve_button = page.locator('dialog a:has-text("Reserva")').first
+                
+                if reserve_button.count() == 0:
+                    log("⚠️ No hay botón de Reserva disponible (posiblemente lleno o ya reservado)")
+                    save_screenshot(page, "error_no_button")
+                    return False
 
-            log("✅ ¡Reserva completada exitosamente!")
-            return True
+                # 7. Reservar
+                log("🎉 Botón de Reserva encontrado, reservando...")
+                reserve_button.wait_for(state="visible", timeout=5000)
+                save_screenshot(page, "step6_before_reserve")
+                reserve_button.click(timeout=5000)
+                page.wait_for_timeout(3000)
+                save_screenshot(page, "step7_after_reserve")
+
+                log("✅ ¡Reserva completada exitosamente!")
+                return True
+                
+            except Exception as e:
+                log(f"❌ Error al hacer click en Reserva: {e}")
+                save_screenshot(page, "error_clicking_reserve")
+                return False
 
     except Exception as e:
         log(f"❌ Error general: {e}")
