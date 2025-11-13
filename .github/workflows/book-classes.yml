@@ -2,11 +2,11 @@ name: Reservar Clases CrossFit
 
 on:
   schedule:
-    # Ejecutar a las 19:30 UTC (20:30 CET en invierno, 21:30 CEST en verano)
-    # Para reservar martes (lunes 19:30), jueves (miércoles 19:30), viernes (jueves 19:30)
-    - cron: '30 18 0,2,3 * *'  # 18:30 UTC = 19:30 CET (lunes, miércoles, jueves)
+    # Ejecutar a las 18:30 UTC = 19:30 CET
+    # 1=Lunes, 3=Miércoles, 4=Jueves
+    - cron: '30 18 * * 1,3,4'
   
-  workflow_dispatch:  # Permite ejecutar manualmente
+  workflow_dispatch:
 
 env:
   CLUB_USERNAME: ${{ secrets.CLUB_USERNAME }}
