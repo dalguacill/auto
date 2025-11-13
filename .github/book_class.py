@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
-# Configuración
 USERNAME = os.environ.get('CLUB_USERNAME', '44711')
 PASSWORD = os.environ.get('CLUB_PASSWORD', 'damolto8')
 BASE_URL = 'https://cnmolins.miclubonline.net'
@@ -12,11 +11,7 @@ BASE_URL = 'https://cnmolins.miclubonline.net'
 def get_target_day():
     """Determina qué día queremos reservar basándonos en el día actual"""
     today = datetime.now()
-    day_name = today.weekday()  # 0=Monday, 1=Tuesday, etc.
-    
-    # Si hoy es lunes (0), reservamos para mañana martes (1)
-    # Si hoy es miércoles (2), reservamos para mañana jueves (3)
-    # Si hoy es jueves (3), reservamos para mañana viernes (4)
+    day_name = today.weekday()
     
     target_days = {
         0: ('martes', 1),      # Lunes -> Reservar Martes
@@ -25,7 +20,7 @@ def get_target_day():
     }
     
     if day_name not in target_days:
-        print(f"❌ Hoy es {['lunes','martes','miércoles','jueves','viernes','sábado','domingo'][day_name]}, no hay que reservar nada.")
+        print(f"ℹ️ Hoy es {['lunes','martes','miércoles','jueves','viernes','sábado','domingo'][day_name]}, no hay que reservar nada.")
         return None, None
     
     return target_days[day_name]
@@ -36,12 +31,14 @@ def book_class():
     target_day_name, target_day_num = get_target_day()
     
     if target_day_name is None:
-        return True  # No es un día de reserva
+        return True  # No es día de reserva, salir exitosamente
     
     print(f"🎯 Objetivo: Reservar clase de CrossFit para {target_day_name}")
+    print(f"⏰ Fecha/Hora actual: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    with sync_playwright() as p:
-        try:
+    browser = None
+    try:
+        with sync_playwright() as p:
             # Iniciar navegador
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(
@@ -52,14 +49,18 @@ def book_class():
             
             # 1. Ir a la página de login
             print("📍 Navegando a la página de login...")
-            page.goto(f'{BASE_URL}/user/login', wait_until='networkidle')
+            page.goto(f'{BASE_URL}/user/login', wait_until='networkidle', timeout=30000)
+            page.screenshot(path='step1_login_page.png')
             
             # 2. Iniciar sesión
             print("🔐 Iniciando sesión...")
             page.fill('#edit-name', USERNAME)
             page.fill('#edit-pass', PASSWORD)
+            page.screenshot(path='step2_before_submit.png')
+            
             page.click('#edit-submit')
-            page.wait_for_load_state('networkidle')
+            page.wait_for_load_state('networkidle', timeout=30000)
+            page.screenshot(path='step3_after_login.png')
             
             # Verificar que el login fue exitoso
             if 'login' in page.url:
@@ -71,38 +72,55 @@ def book_class():
             
             # 3. Ir a la página de actividades dirigidas
             print("📍 Navegando a actividades dirigidas...")
-            page.goto(f'{BASE_URL}/dirigidas', wait_until='networkidle')
-            page.wait_for_timeout(3000)  # Esperar a que cargue el calendario
+            page.goto(f'{BASE_URL}/dirigidas', wait_until='networkidle', timeout=30000)
+            page.wait_for_timeout(3000)
+            page.screenshot(path='step4_calendar.png')
             
-            # 4. Buscar la clase de CrossFit del día objetivo a las 19:30
+            # 4. Buscar la clase de CrossFit
             print(f"🔍 Buscando clase de CrossFit para {target_day_name} 19:30...")
             
-            # Intentar encontrar la clase con diferentes textos posibles
-            class_selectors = [
-                f'text=/19:30.*CROSS TRAIN/i',
-                'text=/19:30.*20:15.*CROSS TRAIN/i'
-            ]
-            
+            # Intentar múltiples estrategias para encontrar la clase
             class_found = False
-            for selector in class_selectors:
+            
+            # Estrategia 1: Buscar por texto que contenga 19:30 y CROSS TRAIN
+            try:
+                print("   Estrategia 1: Buscando por texto...")
+                links = page.locator('a').all()
+                print(f"   Encontrados {len(links)} enlaces en la página")
+                
+                for link in links:
+                    try:
+                        text = link.inner_text(timeout=1000)
+                        if '19:30' in text and 'CROSS TRAIN' in text.upper():
+                            print(f"   ✓ Encontrado: {text[:100]}")
+                            if link.is_visible():
+                                link.click(timeout=5000)
+                                class_found = True
+                                break
+                    except:
+                        continue
+            except Exception as e:
+                print(f"   Estrategia 1 falló: {e}")
+            
+            # Estrategia 2: Buscar específicamente el bloque horario
+            if not class_found:
                 try:
-                    elements = page.locator(selector).all()
-                    print(f"   Encontrados {len(elements)} elementos con selector: {selector}")
+                    print("   Estrategia 2: Buscando bloque horario...")
+                    # Buscar cualquier elemento que tenga el texto con 19:30
+                    elements = page.get_by_text('19:30').all()
+                    print(f"   Encontrados {len(elements)} elementos con 19:30")
                     
-                    for element in elements:
-                        # Verificar si el elemento es clickeable y está visible
-                        if element.is_visible():
-                            print("   Elemento visible encontrado, haciendo clic...")
-                            element.click(timeout=5000)
-                            class_found = True
-                            break
-                    
-                    if class_found:
-                        break
-                        
+                    for elem in elements:
+                        parent = elem.locator('xpath=ancestor::a').first
+                        if parent.count() > 0:
+                            text = parent.inner_text()
+                            if 'CROSS TRAIN' in text.upper():
+                                print(f"   ✓ Encontrado en padre: {text[:100]}")
+                                parent.click(timeout=5000)
+                                class_found = True
+                                break
                 except Exception as e:
-                    print(f"   No se encontró con selector {selector}: {e}")
-                    continue
+                    print(f"   Estrategia 2 falló: {e}")
             
             if not class_found:
                 print("⚠️ No se encontró la clase. Posibles razones:")
@@ -115,43 +133,85 @@ def book_class():
             # 5. Esperar a que aparezca el modal
             print("⏳ Esperando modal de reserva...")
             page.wait_for_timeout(2000)
+            page.screenshot(path='step5_modal.png')
             
-            # 6. Verificar si hay botón de Reserva
+            # 6. Buscar el botón de Reserva
+            print("🔍 Buscando botón de Reserva...")
+            
             try:
-                reserve_button = page.locator('button:has-text("Reserva"), input[value="Reserva"]')
+                # Intentar diferentes selectores para el botón
+                reserve_selectors = [
+                    'button:has-text("Reserva")',
+                    'input[value="Reserva"]',
+                    'button:text("Reserva")',
+                    'a:has-text("Reserva")'
+                ]
                 
-                if reserve_button.count() == 0:
+                reserve_button = None
+                for selector in reserve_selectors:
+                    try:
+                        btn = page.locator(selector)
+                        if btn.count() > 0:
+                            reserve_button = btn
+                            print(f"   ✓ Botón encontrado con selector: {selector}")
+                            break
+                    except:
+                        continue
+                
+                if reserve_button is None or reserve_button.count() == 0:
                     print("⚠️ No hay botón de Reserva disponible.")
                     print("   La clase probablemente no está en la ventana de 24h o está completa.")
                     page.screenshot(path='error_screenshot.png')
+                    
+                    # Mostrar el HTML del modal para debug
+                    modal_html = page.locator('body').inner_html()
+                    print(f"   HTML del modal (primeros 500 chars): {modal_html[:500]}")
                     return False
                 
                 # 7. Hacer clic en Reserva
                 print("🎉 ¡Botón de Reserva encontrado! Reservando...")
-                reserve_button.first.click()
+                page.screenshot(path='step6_before_reserve.png')
+                
+                reserve_button.first.click(timeout=5000)
                 page.wait_for_timeout(3000)
+                
+                page.screenshot(path='step7_after_reserve.png')
                 
                 # 8. Verificar confirmación
                 print("✅ ¡Reserva completada exitosamente!")
-                page.screenshot(path='success_screenshot.png')
                 return True
                 
             except Exception as e:
                 print(f"❌ Error al intentar reservar: {e}")
                 page.screenshot(path='error_screenshot.png')
                 return False
-            
-        except Exception as e:
-            print(f"❌ Error general: {e}")
-            try:
+                
+    except Exception as e:
+        print(f"❌ Error general: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        try:
+            if browser and page:
                 page.screenshot(path='error_screenshot.png')
+        except:
+            pass
+        return False
+    
+    finally:
+        if browser:
+            try:
+                browser.close()
             except:
                 pass
-            return False
-        
-        finally:
-            browser.close()
 
 if __name__ == '__main__':
-    success = book_class()
-    sys.exit(0 if success else 1)
+    try:
+        success = book_class()
+        sys.exit(0 if success else 1)
+    except Exception as e:
+        print(f"❌ Error fatal: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+  
