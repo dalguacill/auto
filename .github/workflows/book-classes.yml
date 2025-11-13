@@ -35,10 +35,12 @@ jobs:
     - name: Ejecutar reserva
       run: python book_class.py
       
-    - name: Upload screenshot en caso de error
-      if: failure()
+    - name: Subir capturas y logs (siempre)
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: error-screenshot
-        path: error_screenshot.png
+        name: book-class-debug
+        path: |
+          screenshots/
+          logs/
         retention-days: 7
