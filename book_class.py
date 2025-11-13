@@ -94,7 +94,7 @@ def book_class():
             # 3. Ir a actividades dirigidas
             log("📍 Navegando a actividades dirigidas...")
             page.goto(f'{BASE_URL}/dirigidas', wait_until='networkidle', timeout=30000)
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(13000)
 
             # 4. Buscar clase
             log(f"🔍 Buscando clase de CrossFit para {target_day_name} 19:30...")
@@ -108,7 +108,7 @@ def book_class():
                         text = link.inner_text(timeout=1000)
                         if '19:30' in text and 'CROSS TRAIN' in text.upper():
                             if link.is_visible():
-                                link.click(timeout=5000)
+                                link.click(timeout=15000)
                                 class_found = True
                                 break
                     except Exception:
@@ -125,7 +125,7 @@ def book_class():
                         if parent.count() > 0:
                             text = parent.inner_text()
                             if 'CROSS TRAIN' in text.upper():
-                                parent.click(timeout=5000)
+                                parent.click(timeout=15000)
                                 class_found = True
                                 break
                 except Exception as e:
@@ -159,8 +159,8 @@ def book_class():
 
             # 6. Reservar
             log("🎉 ¡Botón de Reserva encontrado! Reservando...")
-            reserve_button.first.click(timeout=5000)
-            page.wait_for_timeout(3000)
+            reserve_button.first.click(timeout=15000)
+            page.wait_for_timeout(13000)
 
             log("✅ ¡Reserva completada exitosamente!")
             return True
